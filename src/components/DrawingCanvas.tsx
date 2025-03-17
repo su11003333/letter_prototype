@@ -6,9 +6,15 @@ interface DrawingCanvasProps {
   brushColor: string;
   brushSize: number;
   bgColor: string;
+  character?: string; // 新增屬性，允許外部傳入要練習的漢字
 }
 
-const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ brushColor, brushSize, bgColor }) => {
+const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ 
+  brushColor, 
+  brushSize, 
+  bgColor,
+  character = '大' // 預設是"大"字，但可以被替換
+}) => {
   // 三個畫布層的引用
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);  // 底層 - 背景
   const drawingCanvasRef = useRef<HTMLCanvasElement>(null);     // 中間層 - 繪圖層
@@ -23,8 +29,13 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ brushColor, brushSize, bg
   const [characterMask, setCharacterMask] = useState<HTMLCanvasElement | null>(null);
   const [isClient, setIsClient] = useState(false);
   
+  // 添加滑鼠座標狀態
+  const [mousePosition, setMousePosition] = useState<{ x: number, y: number } | null>(null);
+  
+  // 基本函數定義 - 確保它們在使用前定義
+  
   // 創建字符遮罩
-  const createCharacterMask = useCallback((size: number) => {
+  const createCharacterMask = useCallback((size: number, char: string) => {
     // 創建臨時畫布存儲遮罩形狀
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = size;
@@ -32,17 +43,31 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ brushColor, brushSize, bg
     const tempCtx = tempCanvas.getContext('2d');
     
     if (tempCtx) {
-      // 繪製漢字"大"
+      // 繪製漢字
       tempCtx.fillStyle = 'white';  // 使用白色表示可繪製區域
       const fontSize = Math.floor(size * 0.85);
       tempCtx.font = `bold ${fontSize}px "SimHei", "Microsoft YaHei", sans-serif`;
       tempCtx.textAlign = 'center';
       tempCtx.textBaseline = 'middle';
-      tempCtx.fillText('大', size / 2, size / 2);
+      tempCtx.fillText(char, size / 2, size / 2);
     }
     
     return tempCanvas;
   }, []);
+  
+  // 檢查點是否在遮罩內的函數
+  const checkPointInMask = useCallback((x: number, y: number): boolean => {
+    if (!characterMask) return false;
+    
+    const ctx = characterMask.getContext('2d');
+    if (!ctx) return false;
+    
+    // 獲取遮罩上該點的像素數據
+    const pixelData = ctx.getImageData(x, y, 1, 1).data;
+    
+    // 如果像素不是透明的，則點在遮罩內
+    return pixelData[0] > 0;  // 檢查紅色通道（因為我們用白色繪製了字符）
+  }, [characterMask]);
   
   // 初始化背景
   const initBackground = useCallback(() => {
@@ -74,12 +99,26 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ brushColor, brushSize, bg
     
     ctx.globalCompositeOperation = 'destination-out';
     
-    // 繪製漢字"大"形狀的洞
+    // 繪製漢字形狀的洞
     ctx.drawImage(characterMask, 0, 0);
     
     // 重置混合模式
     ctx.globalCompositeOperation = 'source-over';
   }, [characterMask]);
+  
+  // 清除繪圖 - 在所有使用它的效果之前定義
+  const clearCanvas = useCallback(() => {
+    const canvas = drawingCanvasRef.current;
+    
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      
+      if (ctx) {
+        // 清空繪圖層
+        ctx.clearRect(0, 0, canvasSize, canvasSize);
+      }
+    }
+  }, [canvasSize]);
   
   // 在離屏畫布上繪製，然後應用遮罩
   const drawToOffscreen = useCallback((fromX: number, fromY: number, toX: number, toY: number) => {
@@ -126,55 +165,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ brushColor, brushSize, bg
     
     // 重置混合模式
     drawCtx.globalCompositeOperation = 'source-over';
-  }, [canvasSize, brushColor, brushSize]);
-  
-  // 在客戶端初始化
-  useEffect(() => {
-    setIsClient(true);
-    
-    // 計算畫布尺寸，適應不同屏幕
-    const size = Math.min(600, window.innerWidth - 40);
-    setCanvasSize(size);
-    
-    // 創建離屏畫布
-    const offscreenCanvas = document.createElement('canvas');
-    offscreenCanvas.width = size;
-    offscreenCanvas.height = size;
-    offscreenCanvasRef.current = offscreenCanvas;
-    
-    // 創建字符遮罩
-    const mask = createCharacterMask(size);
-    setCharacterMask(mask);
-    
-    // 監聽窗口大小變化
-    const handleResize = () => {
-      const newSize = Math.min(600, window.innerWidth - 40);
-      if (newSize !== canvasSize) {
-        setCanvasSize(newSize);
-        
-        // 更新離屏畫布
-        const newOffscreenCanvas = document.createElement('canvas');
-        newOffscreenCanvas.width = newSize;
-        newOffscreenCanvas.height = newSize;
-        offscreenCanvasRef.current = newOffscreenCanvas;
-        
-        // 更新字符遮罩
-        const newMask = createCharacterMask(newSize);
-        setCharacterMask(newMask);
-      }
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [canvasSize, createCharacterMask]);
-  
-  // 當背景顏色、畫布大小或遮罩變化時，重新初始化
-  useEffect(() => {
-    if (isClient && characterMask) {
-      initBackground();
-      drawMask();
-    }
-  }, [bgColor, canvasSize, isClient, characterMask, initBackground, drawMask]);
+  }, [canvasSize, brushColor, brushSize, characterMask]);
   
   // 處理事件 - 統一鼠標和觸摸事件
   const getEventPosition = useCallback((e: React.MouseEvent | React.TouchEvent): { x: number, y: number } | null => {
@@ -199,6 +190,14 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ brushColor, brushSize, bg
     };
   }, []);
   
+  // 處理滑鼠離開畫布
+  const handleMouseLeave = useCallback(() => {
+    if (!isDrawing) {
+      // 只有在非繪圖狀態才清除座標顯示
+      setMousePosition(null);
+    }
+  }, [isDrawing]);
+  
   // 鼠標/觸摸按下事件處理
   const handleStart = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     setIsDrawing(true);
@@ -207,6 +206,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ brushColor, brushSize, bg
     if (!pos) return;
     
     setLastPos(pos);
+    setMousePosition(pos);
     
     // 開始繪製
     drawToOffscreen(pos.x, pos.y, pos.x, pos.y);
@@ -214,10 +214,13 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ brushColor, brushSize, bg
   
   // 鼠標/觸摸移動事件處理
   const handleMove = useCallback((e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !lastPos) return;
-    
     const pos = getEventPosition(e);
     if (!pos) return;
+    
+    // 無論是否繪圖，都更新滑鼠位置
+    setMousePosition(pos);
+    
+    if (!isDrawing || !lastPos) return;
     
     // 繪製線段
     drawToOffscreen(lastPos.x, lastPos.y, pos.x, pos.y);
@@ -230,21 +233,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ brushColor, brushSize, bg
   const handleEnd = useCallback(() => {
     setIsDrawing(false);
     setLastPos(null);
+    // 不清除滑鼠位置，保持顯示最後位置
   }, []);
-  
-  // 清除繪圖
-  const clearCanvas = useCallback(() => {
-    const canvas = drawingCanvasRef.current;
-    
-    if (canvas) {
-      const ctx = canvas.getContext('2d');
-      
-      if (ctx) {
-        // 清空繪圖層
-        ctx.clearRect(0, 0, canvasSize, canvasSize);
-      }
-    }
-  }, [canvasSize]);
   
   // 下載圖像
   const downloadImage = useCallback(() => {
@@ -269,10 +259,69 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ brushColor, brushSize, bg
     
     // 創建下載鏈接
     const link = document.createElement('a');
-    link.download = '汉字大绘图.png';
+    link.download = `漢字${character}繪圖.png`;
     link.href = compositeCanvas.toDataURL('image/png');
     link.click();
-  }, [canvasSize]);
+  }, [canvasSize, character]);
+  
+  // 初始化效果
+  
+  // 在客戶端初始化
+  useEffect(() => {
+    setIsClient(true);
+    
+    // 計算畫布尺寸，適應不同屏幕
+    const size = Math.min(600, window.innerWidth - 40);
+    setCanvasSize(size);
+    
+    // 創建離屏畫布
+    const offscreenCanvas = document.createElement('canvas');
+    offscreenCanvas.width = size;
+    offscreenCanvas.height = size;
+    offscreenCanvasRef.current = offscreenCanvas;
+    
+    // 創建字符遮罩
+    const mask = createCharacterMask(size, character);
+    setCharacterMask(mask);
+    
+    // 監聽窗口大小變化
+    const handleResize = () => {
+      const newSize = Math.min(600, window.innerWidth - 40);
+      if (newSize !== canvasSize) {
+        setCanvasSize(newSize);
+        
+        // 更新離屏畫布
+        const newOffscreenCanvas = document.createElement('canvas');
+        newOffscreenCanvas.width = newSize;
+        newOffscreenCanvas.height = newSize;
+        offscreenCanvasRef.current = newOffscreenCanvas;
+        
+        // 更新字符遮罩
+        const newMask = createCharacterMask(newSize, character);
+        setCharacterMask(newMask);
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [canvasSize, createCharacterMask, character]);
+  
+  // 當背景顏色、畫布大小、遮罩或字符變化時，重新初始化
+  useEffect(() => {
+    if (isClient && characterMask) {
+      initBackground();
+      drawMask();
+      
+      // 字符變化時，清空繪圖層
+      const canvas = drawingCanvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvasSize, canvasSize);
+        }
+      }
+    }
+  }, [bgColor, canvasSize, isClient, characterMask, character, initBackground, drawMask]);
   
   // 如果不在客戶端，返回null
   if (!isClient) {
@@ -291,9 +340,30 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ brushColor, brushSize, bg
   
   return (
     <div style={{ width: canvasSize, margin: '0 auto' }}>
-      <div className="canvas-buttons" style={{ marginBottom: '10px', display: 'flex', justifyContent: 'center', gap: '10px' }}>
+      <div className="canvas-buttons" style={{ marginBottom: '10px', display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
         <button onClick={clearCanvas} style={{ padding: '5px 10px' }}>清除绘图</button>
         <button onClick={downloadImage} style={{ padding: '5px 10px' }}>下载图片</button>
+        
+        {/* 顯示滑鼠座標及遮罩狀態 */}
+        <div style={{ 
+          minWidth: '140px', 
+          padding: '5px 10px', 
+          backgroundColor: mousePosition && checkPointInMask(mousePosition.x, mousePosition.y) 
+            ? 'rgba(144, 238, 144, 0.3)' // 在遮罩內顯示淺綠色背景
+            : '#f0f0f0', 
+          border: '1px solid #ccc',
+          borderRadius: '4px',
+          textAlign: 'center',
+          fontSize: '14px'
+        }}>
+          {mousePosition 
+            ? `X: ${Math.round(mousePosition.x)}, Y: ${Math.round(mousePosition.y)} ${
+                mousePosition && checkPointInMask(mousePosition.x, mousePosition.y) 
+                  ? '✓' // 在遮罩內顯示勾號
+                  : ''
+              }` 
+            : '移動滑鼠到畫布上'}
+        </div>
       </div>
       
       <div style={{ position: 'relative', width: canvasSize, height: canvasSize, margin: '0 auto', border: '1px solid #ccc', borderRadius: '4px' }}>
@@ -320,10 +390,17 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ brushColor, brushSize, bg
           onMouseDown={handleStart}
           onMouseMove={handleMove}
           onMouseUp={handleEnd}
-          onMouseLeave={handleEnd}
+          onMouseLeave={(e) => {
+            handleEnd();
+            handleMouseLeave();
+          }}
           onTouchStart={handleStart}
           onTouchMove={handleMove}
           onTouchEnd={handleEnd}
+          onMouseEnter={(e) => {
+            const pos = getEventPosition(e);
+            if (pos) setMousePosition(pos);
+          }}
         />
         
         {/* 頂層 - 遮罩層，顯示灰色遮罩和"大"字形狀的透明區域 */}
@@ -340,7 +417,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ brushColor, brushSize, bg
       </div>
       
       <div style={{ marginTop: '10px', textAlign: 'center', fontSize: '14px', color: '#666' }}>
-        請在"大"字範圍內繪圖，只有大字內的筆畫會被顯示
+        請在"<span style={{ fontWeight: 'bold' }}>{character}</span>"字範圍內繪圖，只有字形內的筆畫會被顯示
       </div>
     </div>
   );
