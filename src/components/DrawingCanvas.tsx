@@ -6,14 +6,16 @@ interface DrawingCanvasProps {
   brushColor: string;
   brushSize: number;
   bgColor: string;
-  character?: string; // 新增屬性，允許外部傳入要練習的漢字
+  character?: string; // 允許外部傳入要練習的漢字
+  fontStyle?: string; // 允許外部傳入字體樣式
 }
 
 const DrawingCanvas: React.FC<DrawingCanvasProps> = ({ 
   brushColor, 
   brushSize, 
   bgColor,
-  character = '大' // 預設是"大"字，但可以被替換
+  character = '大', // 預設是"大"字，但可以被替換
+  fontStyle = '"KaiTi", "楷体", "STKaiti", "华文楷体", serif' // 預設使用楷書
 }) => {
   // 三個畫布層的引用
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);  // 底層 - 背景
@@ -35,7 +37,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   // 基本函數定義 - 確保它們在使用前定義
   
   // 創建字符遮罩
-  const createCharacterMask = useCallback((size: number, char: string) => {
+  const createCharacterMask = useCallback((size: number, char: string, font: string) => {
     // 創建臨時畫布存儲遮罩形狀
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = size;
@@ -46,7 +48,8 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       // 繪製漢字
       tempCtx.fillStyle = 'white';  // 使用白色表示可繪製區域
       const fontSize = Math.floor(size * 0.85);
-      tempCtx.font = `bold ${fontSize}px "SimHei", "Microsoft YaHei", sans-serif`;
+      // 使用傳入的字體
+      tempCtx.font = `bold ${fontSize}px ${font}`;
       tempCtx.textAlign = 'center';
       tempCtx.textBaseline = 'middle';
       tempCtx.fillText(char, size / 2, size / 2);
@@ -281,7 +284,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     offscreenCanvasRef.current = offscreenCanvas;
     
     // 創建字符遮罩
-    const mask = createCharacterMask(size, character);
+    const mask = createCharacterMask(size, character, fontStyle);
     setCharacterMask(mask);
     
     // 監聽窗口大小變化
@@ -297,22 +300,22 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         offscreenCanvasRef.current = newOffscreenCanvas;
         
         // 更新字符遮罩
-        const newMask = createCharacterMask(newSize, character);
+        const newMask = createCharacterMask(newSize, character, fontStyle);
         setCharacterMask(newMask);
       }
     };
     
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [canvasSize, createCharacterMask, character]);
+  }, [canvasSize, createCharacterMask, character, fontStyle]);
   
-  // 當背景顏色、畫布大小、遮罩或字符變化時，重新初始化
+  // 當背景顏色、畫布大小、遮罩、字符或字體變化時，重新初始化
   useEffect(() => {
     if (isClient && characterMask) {
       initBackground();
       drawMask();
       
-      // 字符變化時，清空繪圖層
+      // 清空繪圖層
       const canvas = drawingCanvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext('2d');
@@ -321,7 +324,7 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         }
       }
     }
-  }, [bgColor, canvasSize, isClient, characterMask, character, initBackground, drawMask]);
+  }, [bgColor, canvasSize, isClient, characterMask, character, fontStyle, initBackground, drawMask]);
   
   // 如果不在客戶端，返回null
   if (!isClient) {

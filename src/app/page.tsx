@@ -24,6 +24,14 @@ const DrawingCanvas = dynamic(() => import('@/components/DrawingCanvas'), {
 // 常用漢字列表
 const commonCharacters = ['大', '小', '中', '水', '火', '山', '木', '人', '口', '日', '月', '金', '土'];
 
+// 可選字體列表
+const fontStyles = [
+  { id: 'kaiti', name: '楷書', fontFamily: '"KaiTi", "楷体", "STKaiti", "华文楷体", serif' },
+  { id: 'songti', name: '宋體', fontFamily: '"SimSun", "宋体", "STSong", "华文宋体", serif' },
+  { id: 'heiti', name: '黑體', fontFamily: '"SimHei", "黑体", "STHeiti", "华文黑体", sans-serif' },
+  { id: 'fangsong', name: '仿宋', fontFamily: '"FangSong", "仿宋", "STFangsong", "华文仿宋", serif' }
+];
+
 export default function Home() {
   // 顏色和筆刷尺寸狀態
   const [brushColor, setBrushColor] = useState('#FF4500');
@@ -35,6 +43,9 @@ export default function Home() {
   
   // 自定義漢字輸入
   const [customCharacter, setCustomCharacter] = useState('');
+  
+  // 當前選擇的字體
+  const [currentFontStyle, setCurrentFontStyle] = useState(fontStyles[0]);
   
   // 使用預定義顏色列表避免隨機性
   const changeBackground = () => {
@@ -97,7 +108,8 @@ export default function Home() {
                     color: currentCharacter === char ? 'white' : 'black',
                     border: '1px solid #ccc',
                     borderRadius: '4px',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    fontFamily: currentFontStyle.fontFamily
                   }}
                 >
                   {char}
@@ -119,7 +131,8 @@ export default function Home() {
                   fontSize: '16px',
                   width: '150px',
                   border: '1px solid #ccc',
-                  borderRadius: '4px'
+                  borderRadius: '4px',
+                  fontFamily: currentFontStyle.fontFamily
                 }}
               />
               <button 
@@ -136,6 +149,36 @@ export default function Home() {
                 使用此字
               </button>
             </form>
+          </div>
+          
+          {/* 字體風格選擇 */}
+          <div style={{ margin: '10px 0', width: '100%', maxWidth: '600px' }}>
+            <h3 style={{ marginBottom: '10px', textAlign: 'center' }}>選擇字體風格</h3>
+            <div style={{ 
+              display: 'flex', 
+              flexWrap: 'wrap', 
+              gap: '8px', 
+              justifyContent: 'center'
+            }}>
+              {fontStyles.map(font => (
+                <button 
+                  key={font.id}
+                  onClick={() => setCurrentFontStyle(font)}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: currentFontStyle.id === font.id ? '#4caf50' : '#f0f0f0',
+                    color: currentFontStyle.id === font.id ? 'white' : 'black',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontFamily: font.fontFamily,
+                    fontSize: '16px'
+                  }}
+                >
+                  {font.name}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         
@@ -165,11 +208,13 @@ export default function Home() {
             brushSize={brushSize} 
             bgColor={bgColor}
             character={currentCharacter}
+            fontStyle={currentFontStyle.fontFamily}
           />
         </div>
         
         <div style={{ marginTop: '20px', textAlign: 'center' }}>
-          <p>當前練習: <strong style={{ fontSize: '24px' }}>{currentCharacter}</strong></p>
+          <p>當前練習: <strong style={{ fontSize: '24px', fontFamily: currentFontStyle.fontFamily }}>{currentCharacter}</strong></p>
+          <p>字體風格: <span style={{ fontFamily: currentFontStyle.fontFamily }}>{currentFontStyle.name}</span></p>
         </div>
       </main>
     </div>
